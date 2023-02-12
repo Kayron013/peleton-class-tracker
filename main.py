@@ -1,4 +1,3 @@
-from typing import List
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -21,20 +20,22 @@ def main():
     title = driver.title
     print(title)
 
-    class_cards: List[WebElement] = WebDriverWait(driver, 10).until(lambda driver: driver.find_elements(By.CSS_SELECTOR, '[data-test-class=classCards]'))
+    class_cards: list[WebElement] = WebDriverWait(driver, 10).until(lambda driver: driver.find_elements(By.CSS_SELECTOR, '[data-test-class=classCards]'))
+
     (first_class, last_class) = (get_card_details(class_cards[0]), get_card_details(class_cards[-1]))
     print('{} classes from {} to {}'.format(len(class_cards), first_class['date'], last_class['date']))
 
+    # mapping the elements to dicts takes some time, so filtering on the entire text content
     filtered_class_cards = list(filter(lambda x: 'CLASS FULL' not in x.text, class_cards))
     classes = [get_card_details(card) for card in filtered_class_cards]
 
-    print('{} classes not full'.format(len(classes)))
+    print('{} reservable classes'.format(len(classes)))
     pp.pprint(classes)
 
 
 def get_card_details(class_card: WebElement):
     status = class_card.find_element(By.CSS_SELECTOR, ':nth-child(4)').text
-    is_full = status == 'CLASS FULL'
+    is_reservable = status != 'CLASS FULL'
 
     return {
         'name': class_card.find_element(By.CSS_SELECTOR, '[data-test-id=className]').text,
@@ -46,8 +47,9 @@ def get_card_details(class_card: WebElement):
         'status': status,
         'time': class_card.find_element(By.CSS_SELECTOR, ':first-child').text,
         # need xpath to get to parent elements
-        'date': class_card.find_element(By.XPATH, '../../*[1]' if is_full else '../../../*[1]').text,
-        'reserve_link': None if is_full else class_card.get_attribute('href')
+        # class card becomes an <a/> nested in a <li/> when it's reservable, instead of just being the <li/>
+        'date': class_card.find_element(By.XPATH, '../../../*[1]' if is_reservable else '../../*[1]').text,
+        'reserve_link': class_card.get_attribute('href') if is_reservable else None
     }
 
 
