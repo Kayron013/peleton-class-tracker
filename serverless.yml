@@ -1,0 +1,30 @@
+service: peleton-reservable-classes
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-west-2
+  timeout: 900
+
+layers:
+  chromedriver:
+    path: lib/chromedriver
+    description: Chrome driver and headless chromium for use with Selenium
+
+functions:
+  main:
+    memorySize: 1000
+    handler: main.main
+    events:
+      # new classes open up for in-person bookings on Thursdays at 12:00pm ET (5PM UTC)
+      # https://www.pelobuddy.com/psny-days-limits/
+      - schedule: cron(5 17 * * ? *)
+
+    layers:
+      - !Ref ChromedriverLambdaLayer
+    
+    environment:
+      RUNTIME_ENV: lambda
+
+plugins:
+  - serverless-python-requirements

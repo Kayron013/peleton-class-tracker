@@ -2,14 +2,18 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.chrome.service import Service
 import pprint
+import os
 
 PELETON_SCHEDULE_URL = 'https://studio.onepeloton.com/new-york/schedule'
 
 pp = pprint.PrettyPrinter(indent=4)
 
 
-def main():
+def main(event, context):
+    # ^- lambda arguments
+
     driver = get_web_driver()
 
     driver.get(PELETON_SCHEDULE_URL)
@@ -30,10 +34,36 @@ def main():
 
 
 def get_web_driver():
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--window-size=1920x1080")
-    return webdriver.Chrome(options=chrome_options)
+    runtime_env = os.environ.get('RUNTIME_ENV')
+    options = webdriver.ChromeOptions()
+
+    if runtime_env == 'lambda':
+        print('getting driver for lambda')
+        options.binary_location = '/opt/headless-chromium'
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--single-process')
+        options.add_argument('--disable-dev-shm-usage')
+
+        service = Service('/opt/chromedriver')
+        return webdriver.Chrome(service=service, options=options)
+
+    else:
+        print('getting driver for local')
+        options.binary_location = 'lib/chromedriver/headless-chromium'
+        options.add_argument('--headless')
+        # options.add_argument('--no-sandbox')
+        # options.add_argument('--single-process')
+        # options.add_argument('--disable-dev-shm-usage')
+
+        s=Service('lib/chromedriver/chromedriver')
+        return webdriver.Chrome(service=s, options=options, desired_capabilities={"platform": "LINUX"})
+
+        # return webdriver.Chrome('lib/chromedriver/chromedriver', options=options, desired_capabilities={'browserName': 'chrome', 'browserVersion': '62.0'})
+
+    options.add_argument("--headless")
+    options.add_argument("--window-size=1920x1080")
+    return webdriver.Chrome(options=options)
 
 
 def get_class_details(class_element: WebElement):
@@ -56,4 +86,5 @@ def get_class_details(class_element: WebElement):
     }
 
 
-main()
+if __name__ == '__main__':
+    main(None, None)
