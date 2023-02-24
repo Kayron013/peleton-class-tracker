@@ -1,9 +1,5 @@
 import requests
 import pprint
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 API_BASE_URL = 'https://api.onepeloton.com'
 SCHEDULED_CLASS_ENDPOINT_TEMPLATE = API_BASE_URL + '/ecomm/studio/{}/scheduled_classes'
@@ -36,13 +32,14 @@ def get_classes():
 
 
 def transform_class(clazz, instructors):
+    instructor = [{'name': i['full_name'], 'img': i['image_url']} for i in instructors if i['id'] == clazz['instructor_id']][0]
     return {
-        'instructor': [{'name': i['full_name'], 'img': i['image_url']} for i in instructors if i['id'] == clazz['instructor_id']][0],
+        'instructor': instructor,
         'disciplines': [c['name'] for c in clazz['disciplines']],
         'duration': clazz['duration'],
         'id': clazz['id'],
         'reserve_link': RESERVE_CLASS_URL_TEMPLATE.format(clazz['id']),
-        'name': '',
+        'name': clazz['name'] or '{} Class'.format(instructor['name']),
         'start_time': clazz['start'],
         'free': clazz['free'],
         'waitlist_full': clazz['waitlist_full']
