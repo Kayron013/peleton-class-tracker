@@ -1,59 +1,50 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support.wait import WebDriverWait
+import requests
 import pprint
 
-PELETON_SCHEDULE_URL = 'https://studio.onepeloton.com/new-york/schedule'
+API_BASE_URL = 'https://api.onepeloton.com'
+SCHEDULED_CLASS_ENDPOINT_TEMPLATE = API_BASE_URL + '/ecomm/studio/{}/scheduled_classes'
+
+RESERVE_CLASS_URL_TEMPLATE = 'https://studio.onepeloton.com/new-york/schedule/{}/reserve'
+
+NY_STUDIO_ID = '25900000001'
 
 pp = pprint.PrettyPrinter(indent=4)
 
-
-def main():
-    driver = get_web_driver()
-
-    driver.get(PELETON_SCHEDULE_URL)
-    print(driver.title)
-
-    class_elements: list[WebElement] = WebDriverWait(driver=driver, timeout=10).until(lambda driver: driver.find_elements(By.CSS_SELECTOR, '[data-test-class=classCards]'))
-
-    first_date = get_class_details(class_elements[0])['date']
-    last_date = get_class_details(class_elements[-1])['date']
-    print('{} classes from {} to {}'.format(len(class_elements), first_date, last_date))
-
-    # mapping the elements to dicts takes some time, so filtering on the entire text content
-    filtered_class_cards = list(filter(lambda x: 'CLASS FULL' not in x.text, class_elements))
-    classes = [get_class_details(card) for card in filtered_class_cards]
-
-    print('{} reservable classes'.format(len(classes)))
-    pp.pprint(classes)
+session = requests.Session()
 
 
-def get_web_driver():
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--window-size=1920x1080")
-    return webdriver.Chrome(options=chrome_options)
+def main(event, context):
+    pp.pprint(get_classes())
 
 
-def get_class_details(class_element: WebElement):
-    status = class_element.find_element(By.CSS_SELECTOR, ':nth-child(4)').text
-    is_reservable = status != 'CLASS FULL'
+def get_classes():
+    url = SCHEDULED_CLASS_ENDPOINT_TEMPLATE.format(NY_STUDIO_ID)
+    res = session.get(url)
 
+    if res.status_code >= 400:
+        pp.pprint(res)
+        raise RuntimeError('Failed to get classes')
+
+    data = res.json()
+
+    reservable_classes = [transform_class(c, data['data']['instructors']) for c in data['data']['classes'] if c['bookable'] and not (c['full'] and c['waitlist_full'])]
+    return reservable_classes
+
+
+def transform_class(clazz, instructors):
+    instructor = [{'name': i['full_name'], 'img': i['image_url']} for i in instructors if i['id'] == clazz['instructor_id']][0]
     return {
-        'name': class_element.find_element(By.CSS_SELECTOR, '[data-test-id=className]').text,
-        'instructor': {
-            'name': class_element.find_element(By.CSS_SELECTOR, '[aria-label=Instructor]').text,
-            'image': class_element.find_element(By.TAG_NAME, 'img').get_attribute('src')
-        },
-        'fitness_disciplines': class_element.find_element(By.CSS_SELECTOR, '[aria-label="Fitness Disciplines"]').get_attribute('data-test-info').split(','),
-        'status': status,
-        'time': class_element.find_element(By.CSS_SELECTOR, ':first-child').text,
-        # need xpath to get to parent elements
-        # class card becomes an <a/> nested in a <li/> when it's reservable, instead of just being the <li/>
-        'date': class_element.find_element(By.XPATH, '../../../*[1]' if is_reservable else '../../*[1]').text,
-        'reserve_link': class_element.get_attribute('href') if is_reservable else None
+        'instructor': instructor,
+        'disciplines': [c['name'] for c in clazz['disciplines']],
+        'duration': clazz['duration'],
+        'id': clazz['id'],
+        'reserve_link': RESERVE_CLASS_URL_TEMPLATE.format(clazz['id']),
+        'name': clazz['name'] or '{} Class'.format(instructor['name']),
+        'start_time': clazz['start'],
+        'free': clazz['free'],
+        'waitlist_full': clazz['waitlist_full']
     }
 
 
-main()
+if __name__ == '__main__':
+    main(None, None)
